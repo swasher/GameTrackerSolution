@@ -1,0 +1,46 @@
+# Папки сборки
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+
+# Файлы Visual Studio
+.vs/
+*.user
+*.userosscache
+*.suo
+*.userprefs
+*.dbmdl
+*.dbproj.schemaview
+*.jfm
+*.pfx
+*.publishsettings
+
+# Файлы JetBrains Rider
+.idea/
+*.sln.iml
+*.DotSettings.user
+
+# Временные файлы
+[Tt]emp/
+*.tmp
+*.log
+*.vspscc
+*.vssscc
+
+# Пакеты NuGet
+packages/
+*.nupkg
+*.snupkg
+
+# Файлы Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Другие файлы проекта
+*.cache
+*.bak
+*.[Cc]ache
+*.InstallLog
+tracker.db

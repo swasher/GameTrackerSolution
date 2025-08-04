@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameTrackerClient", "GameTrackerClient\GameTrackerClient.csproj", "{EBC2E93D-723C-4675-9D56-1640049DDDE9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameTrackerService", "GameTrackerService\GameTrackerService.csproj", "{B5B2998C-F5D9-48E0-8398-63A0B2C09623}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EBC2E93D-723C-4675-9D56-1640049DDDE9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EBC2E93D-723C-4675-9D56-1640049DDDE9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EBC2E93D-723C-4675-9D56-1640049DDDE9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EBC2E93D-723C-4675-9D56-1640049DDDE9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B5B2998C-F5D9-48E0-8398-63A0B2C09623}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B5B2998C-F5D9-48E0-8398-63A0B2C09623}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B5B2998C-F5D9-48E0-8398-63A0B2C09623}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B5B2998C-F5D9-48E0-8398-63A0B2C09623}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
