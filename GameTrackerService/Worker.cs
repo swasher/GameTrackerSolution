@@ -45,6 +45,9 @@ public class Worker : BackgroundService
         }
         finally
         {
+            _logger.LogInformation("Service is shutting down. Saving final process times...");
+            _processTracker.SaveAllActiveProcessTimes();
+            
             _logger.LogInformation("Waiting for IPC server to shut down.");
             await ipcTask; // Ожидаем корректного завершения IPC сервера
             _logger.LogInformation("GameTracker Service has stopped.");

@@ -22,6 +22,10 @@ public class ProcessTracker
     private readonly ConcurrentDictionary<string, DateTime> _activeProcesses = new();
     // Начальные директории для отслеживания. Они будут заменяться настройками из GUI.
     private List<string> _watchedDirectories = new() { @"G:\GOG Games\", @"G:\Battle.net\" };
+    
+    // Добавляем логику для периодического сохранения
+    private static readonly TimeSpan PeriodicSaveInterval = TimeSpan.FromSeconds(30);
+    private DateTime _lastPeriodicSave = DateTime.UtcNow;
 
     public ProcessTracker(string dbPath)
     {
@@ -91,6 +95,12 @@ public class ProcessTracker
         var current = Process.GetProcesses();
         var now = DateTime.UtcNow;
 
+        // Периодически сохраняем время для активных сессий
+        if (now - _lastPeriodicSave > PeriodicSaveInterval)
+        {
+            SaveActiveSessionChunks(now);
+        }
+        
         var runningPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var process in current)
@@ -151,6 +161,28 @@ public class ProcessTracker
         cmd.Parameters.AddWithValue("@Path", path);
         cmd.Parameters.AddWithValue("@Seconds", seconds);
         cmd.ExecuteNonQuery();
+    }
+    
+    public void SaveAllActiveProcessTimes()
+    {
+        var now = DateTime.UtcNow;
+        Console.WriteLine($"[INFO] Service shutting down. Saving session time for active processes.");
+ 
+        // Сначала сохраняем оставшиеся "куски" времени
+        SaveActiveSessionChunks(now);
+        _activeProcesses.Clear();
+    }
+ 
+    private void SaveActiveSessionChunks(DateTime now)
+    {
+        Console.WriteLine($"[INFO] Performing periodic save for active processes.");
+        foreach (var (path, startTime) in _activeProcesses)
+        {
+            var seconds = (int)(now - startTime).TotalSeconds;
+            if (seconds > 0) SaveTime(path, seconds);
+            _activeProcesses[path] = now; // Сбрасываем таймер на текущее время
+        }
+        _lastPeriodicSave = now;
     }
     
     public void SetWatchedDirectories(List<string> directories)
