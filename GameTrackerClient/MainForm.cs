@@ -14,6 +14,13 @@ public partial class MainForm : Form
     public MainForm()
     {
         InitializeComponent();
+        
+        // Включаем двойную буферизацию для ListView, чтобы убрать мерцание.
+        // Свойство DoubleBuffered защищено, поэтому используем рефлексию.
+        typeof(ListView).InvokeMember("DoubleBuffered",
+            BindingFlags.SetProperty | BindingFlags.Instance | BindingFlags.NonPublic,
+            null, processListView, new object[] { true });
+        
         processListView.SelectedIndexChanged += ProcessListView_SelectedIndexChanged;
 
         SetupTrayIcon();
@@ -101,37 +108,33 @@ public partial class MainForm : Form
         processListView.BeginUpdate(); // Для оптимизации обновления UI
         try
         {
-            processListView.Items.Clear();
+            // 1. Создаем словарь существующих элементов для быстрого доступа по ключу (пути)
+            var existingItemsMap = processListView.Items.Cast<ListViewItem>()
+                .ToDictionary(item => (string)item.Tag, item => item);
+     
+            // 2. Обновляем существующие и добавляем новые элементы
             foreach (var proc in processesToDisplay)
             {
                 var stats = proc.Value;
-                var displayName = stats.DisplayName ?? Path.GetFileName(proc.Key);
-
-                // Для запущенных процессов добавляем время с момента запуска
-                var totalSeconds = stats.TotalSeconds;
-                if (stats.IsRunning && stats.LastStartTime.HasValue)
+                if (existingItemsMap.TryGetValue(stats.Path, out var existingItem))
                 {
-                    var runningTime = (int)(DateTime.UtcNow - stats.LastStartTime.Value).TotalSeconds;
-                    totalSeconds += runningTime;
+                    // Элемент уже есть, обновляем его
+                    UpdateListViewItem(existingItem, stats);
+                    // Удаляем из словаря, чтобы пометить его как "обработанный"
+                    existingItemsMap.Remove(stats.Path);
                 }
-
-                var timeSpan = TimeSpan.FromSeconds(totalSeconds);
-                var timeFormatted = timeSpan.ToString(@"hh\:mm\:ss");
-
-                var item = new ListViewItem(displayName);
-                item.SubItems.Add(timeFormatted);
-                item.Tag = proc.Key;
-
-                if (!stats.IsTracked)
+                else
                 {
-                    item.ForeColor = Color.Gray;
+                    // Элемента нет, создаем и добавляем новый
+                    var newItem = CreateListViewItem(stats);
+                    processListView.Items.Add(newItem);
                 }
-                if (stats.IsRunning)
-                {
-                    item.Font = new Font(item.Font, FontStyle.Bold);
-                }
-
-                processListView.Items.Add(item);
+            }
+     
+            // 3. Удаляем элементы, которые остались в словаре (т.е. их нет в новом списке)
+            foreach (var itemToRemove in existingItemsMap.Values)
+            {
+                processListView.Items.Remove(itemToRemove);
             }
         }
         finally
@@ -140,6 +143,42 @@ public partial class MainForm : Form
         }
     }
 
+    
+    private ListViewItem CreateListViewItem(ProcessStats stats)
+    {
+        // Создаем пустой элемент с ключом (Tag)
+        var item = new ListViewItem { Tag = stats.Path };
+        // Заполняем его данными
+        UpdateListViewItem(item, stats);
+        return item;
+    }
+ 
+    private void UpdateListViewItem(ListViewItem item, ProcessStats stats)
+    {
+        var displayName = stats.DisplayName ?? Path.GetFileName(stats.Path);
+ 
+        var totalSeconds = stats.TotalSeconds;
+        if (stats.IsRunning && stats.LastStartTime.HasValue)
+        {
+            totalSeconds += (int)(DateTime.UtcNow - stats.LastStartTime.Value).TotalSeconds;
+        }
+ 
+        var timeFormatted = TimeSpan.FromSeconds(totalSeconds).ToString(@"hh\:mm\:ss");
+ 
+        // Обновляем данные, только если они изменились, чтобы избежать лишней перерисовки
+        if (item.Text != displayName) item.Text = displayName;
+ 
+        if (item.SubItems.Count < 2) item.SubItems.Add(timeFormatted);
+        else if (item.SubItems[1].Text != timeFormatted) item.SubItems[1].Text = timeFormatted;
+ 
+        var newFont = stats.IsRunning ? new Font(processListView.Font, FontStyle.Bold) : processListView.Font;
+        if (!item.Font.Equals(newFont)) item.Font = newFont;
+ 
+        var newColor = stats.IsTracked ? processListView.ForeColor : Color.Gray;
+        if (item.ForeColor != newColor) item.ForeColor = newColor;
+    }
+    
+    
     private async void MainForm_Load(object? sender, EventArgs e)
     {
         await FetchDataAndRefreshUiAsync();
