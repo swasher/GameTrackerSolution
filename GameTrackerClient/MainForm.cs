@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using GameTrackerClient.Properties;
 
 namespace GameTrackerClient;
 
@@ -8,6 +9,7 @@ public partial class MainForm : Form
     private readonly IpcClient _ipcClient = new();
     private readonly System.Windows.Forms.Timer _refreshTimer = new();
     private bool _isUpdating = false;
+    private Dictionary<string, ProcessStats>? _fullProcessStatsCache;
     
     public MainForm()
     {
@@ -57,57 +59,19 @@ public partial class MainForm : Form
         trayIcon.DoubleClick += OnShow; // DoubleClick уже был, оставляем
     }
     
-    private async Task UpdateProcessListAsync()
+    private async Task FetchDataAndRefreshUiAsync()
     {
         if (_isUpdating) return;
 
         _isUpdating = true;
         refreshButton.Enabled = false;
-
+        
         try
         {
-            var processes = await Task.Run(() => _ipcClient.GetFullProcessStatsAsync());
-
-            processListView.BeginUpdate(); // Для оптимизации обновления UI
-            try
-            {
-                processListView.Items.Clear();
-                foreach (var proc in processes.OrderBy(p => p.Value.DisplayNameOrPath))
-                {
-                    var stats = proc.Value;
-                    var displayName = stats.DisplayName ?? Path.GetFileName(proc.Key);
-
-                    // Для запущенных процессов добавляем время с момента запуска
-                    var totalSeconds = stats.TotalSeconds;
-                    if (stats.IsRunning && stats.LastStartTime.HasValue)
-                    {
-                        var runningTime = (int)(DateTime.UtcNow - stats.LastStartTime.Value).TotalSeconds;
-                        totalSeconds += runningTime;
-                    }
-
-                    var timeSpan = TimeSpan.FromSeconds(totalSeconds);
-                    var timeFormatted = timeSpan.ToString(@"hh\:mm\:ss");
-
-                    var item = new ListViewItem(displayName);
-                    item.SubItems.Add(timeFormatted);
-                    item.Tag = proc.Key;
-
-                    if (!stats.IsTracked)
-                    {
-                        item.ForeColor = Color.Gray;
-                    }
-                    if (stats.IsRunning)
-                    {
-                        item.Font = new Font(item.Font, FontStyle.Bold);
-                    }
-
-                    processListView.Items.Add(item);
-                }
-            }
-            finally
-            {
-                processListView.EndUpdate();
-            }
+            // 1. Получаем ПОЛНЫЙ список от службы и кэшируем его
+            _fullProcessStatsCache = await Task.Run(() => _ipcClient.GetFullProcessStatsAsync());
+            // 2. Применяем фильтры и обновляем UI
+            ApplyFilterAndRefreshUi();
         }
         catch (Exception ex)
         {
@@ -123,9 +87,62 @@ public partial class MainForm : Form
         }
     }
 
+    private void ApplyFilterAndRefreshUi()
+    {
+        if (_fullProcessStatsCache == null) return;
+
+        var showHidden = Settings.Default.ShowHiddenApps;
+
+        // Фильтруем на основе настройки. Скрытые - это те, у которых IsTracked = false
+        var processesToDisplay = _fullProcessStatsCache
+            .Where(p => showHidden || p.Value.IsTracked)
+            .OrderBy(p => p.Value.DisplayNameOrPath);
+
+        processListView.BeginUpdate(); // Для оптимизации обновления UI
+        try
+        {
+            processListView.Items.Clear();
+            foreach (var proc in processesToDisplay)
+            {
+                var stats = proc.Value;
+                var displayName = stats.DisplayName ?? Path.GetFileName(proc.Key);
+
+                // Для запущенных процессов добавляем время с момента запуска
+                var totalSeconds = stats.TotalSeconds;
+                if (stats.IsRunning && stats.LastStartTime.HasValue)
+                {
+                    var runningTime = (int)(DateTime.UtcNow - stats.LastStartTime.Value).TotalSeconds;
+                    totalSeconds += runningTime;
+                }
+
+                var timeSpan = TimeSpan.FromSeconds(totalSeconds);
+                var timeFormatted = timeSpan.ToString(@"hh\:mm\:ss");
+
+                var item = new ListViewItem(displayName);
+                item.SubItems.Add(timeFormatted);
+                item.Tag = proc.Key;
+
+                if (!stats.IsTracked)
+                {
+                    item.ForeColor = Color.Gray;
+                }
+                if (stats.IsRunning)
+                {
+                    item.Font = new Font(item.Font, FontStyle.Bold);
+                }
+
+                processListView.Items.Add(item);
+            }
+        }
+        finally
+        {
+            processListView.EndUpdate();
+        }
+    }
+
     private async void MainForm_Load(object? sender, EventArgs e)
     {
-        await UpdateProcessListAsync();
+        await FetchDataAndRefreshUiAsync();
         _refreshTimer.Start();
     }
 
@@ -134,13 +151,13 @@ public partial class MainForm : Form
         // Обновляем, только если окно видимо, чтобы не тратить ресурсы впустую
         if (this.Visible)
         {
-            await UpdateProcessListAsync();
+            await FetchDataAndRefreshUiAsync();
         }
     }
     
     private async void refreshButton_Click(object sender, EventArgs e)
     {
-        await UpdateProcessListAsync();
+        await FetchDataAndRefreshUiAsync();
     }
     
     private async void renameButton_Click(object sender, EventArgs e)
@@ -204,7 +221,7 @@ public partial class MainForm : Form
                 }
                 else
                 {
-                    await UpdateProcessListAsync();
+                    await FetchDataAndRefreshUiAsync();
                 }
             }
         }
@@ -233,7 +250,7 @@ public partial class MainForm : Form
             }
             else
             {
-                await UpdateProcessListAsync();
+                await FetchDataAndRefreshUiAsync();
             }
         }
     }
@@ -264,9 +281,14 @@ public partial class MainForm : Form
         base.OnFormClosing(e);
     }
 
-    private void settingsButton_Click(object sender, EventArgs e)
+    private async void settingsButton_Click(object sender, EventArgs e)
     {
         using var settingsForm = new SettingsForm(_ipcClient);
-        settingsForm.ShowDialog(this);
+        if (settingsForm.ShowDialog(this) == DialogResult.OK)
+        {
+            // Настройки (папки или фильтр) могли измениться.
+            // Выполняем полное обновление данных и перерисовку.
+            await FetchDataAndRefreshUiAsync();
+        }
     }
 }
