@@ -22,7 +22,7 @@ public partial class MainForm : Form
         // Чтобы добавить обработчик Load, можно в дизайнере выбрать форму,
         // зайти в панель Properties -> Events (значок молнии) и дважды кликнуть на событие "Load".
         this.Load += MainForm_Load;
-        _refreshTimer.Interval = 5000; // Обновление каждые 5 секунд
+        _refreshTimer.Interval = 1000; // Обновление каждые 5 секунд
         _refreshTimer.Tick += RefreshTimer_Tick;
     }
 
