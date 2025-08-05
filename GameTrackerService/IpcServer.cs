@@ -22,54 +22,6 @@ public class IpcServer
         _processTracker = processTracker;
     }
 
-    // public async Task Start(CancellationToken token)
-    // {
-    //     Logger.Info("IPC Server starting...");
-    //     while (!token.IsCancellationRequested)
-    //     {
-    //         try
-    //         {
-    //             await using var server = new NamedPipeServerStream(PipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-    //             Logger.Info($"Waiting for a client connection on pipe '{PipeName}'...");
-    //             await server.WaitForConnectionAsync(token);
-    //             Logger.Info("Client connected.");
-    //
-    //             // Указываем leaveOpen: true, чтобы StreamReader и StreamWriter не закрывали основной поток (пайп).
-    //             // За закрытие теперь отвечает только главный блок "await using var server".
-    //             using var reader = new StreamReader(server, Encoding.UTF8, leaveOpen: true);
-    //             using var writer = new StreamWriter(server, Encoding.UTF8, leaveOpen: true) { AutoFlush = true };
-    //
-    //             var request = await reader.ReadLineAsync(token);
-    //             if (request == null)
-    //             {
-    //                 Logger.Info("Client disconnected without sending a request.");
-    //                 continue;
-    //             }
-    //             Logger.Info($"Received request: {request.Split(' ')[0]}");
-    //
-    //             var response = HandleRequest(request);
-    //             Logger.Info($"Sending response: {response}");
-    //             await writer.WriteLineAsync(response);
-    //             // Явно отправляем буфер клиенту перед завершением цикла.
-    //             await writer.FlushAsync();
-    //         }
-    //         catch (OperationCanceledException)
-    //         {
-    //             // Это ожидаемое исключение при остановке службы
-    //             Logger.Info("Operation canceled. IPC server is shutting down.");
-    //             break;
-    //         }
-    //         catch (Exception ex)
-    //         {
-    //             Logger.Error($"IPC Server loop error", ex);
-    //             // Небольшая задержка перед новой попыткой, чтобы не зацикливаться при постоянной ошибке
-    //             await Task.Delay(1000, token);
-    //         }
-    //         // Добавьте задержку после закрытия пайпа
-    //         await Task.Delay(PipeRestartDelayMs, token);
-    //     }
-    //     Logger.Info("IPC Server stopped.");
-    // }
     [SupportedOSPlatform("windows")]
     public async Task Start(CancellationToken token)
     {
