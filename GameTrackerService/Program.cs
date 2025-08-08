@@ -9,9 +9,8 @@ using System.Reflection;
 using Serilog;
 
 
-Directory.SetCurrentDirectory(AppContext.BaseDirectory);
-
 Host.CreateDefaultBuilder(args)
+    .UseContentRoot(AppContext.BaseDirectory)
     .UseWindowsService() // важно!
     .UseSerilog((context, services, loggerConfiguration) =>
     {
