@@ -28,6 +28,16 @@ ISS_SCRIPT = $(SOLUTION_DIR)/setup.iss
 # Цель по умолчанию: собрать всё и создать инсталлятор.
 all: installer
 
+# Увеличение patch-версии
+bump:
+	@echo "--> Bumping patch version..."
+	@old_version=$$(cat VERSION); \
+	IFS='.' read -r major minor patch <<< $$old_version; \
+	new_patch=$$((patch + 1)); \
+	new_version="$$major.$$minor.$$new_patch"; \
+	echo $$new_version > VERSION; \
+	echo "Version bumped to $$new_version"
+
 # Публикация обоих проектов в режиме Release.
 # 'dotnet publish' собирает проект и копирует все зависимости в одну папку.
 build:
@@ -36,7 +46,7 @@ build:
 	dotnet publish $(SERVER_PROJ) -c Release -f $(SERVER_TARGET_FRAMEWORK) -o $(SERVER_PUBLISH_DIR)
 
 # Создание инсталлятора с помощью Inno Setup.
-installer: build
+installer: bump build
 	@echo "--> Creating installer with Inno Setup..."
 	"$(ISCC)" $(ISS_SCRIPT)
 

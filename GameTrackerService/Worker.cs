@@ -10,11 +10,12 @@ public class Worker : BackgroundService
     private readonly ProcessTracker _processTracker;
     private readonly IpcServer _ipcServer;
 
-    public Worker(ILogger<Worker> logger, ProcessTracker processTracker)
+    public Worker(ILogger<Worker> logger, ProcessTracker processTracker, IpcServer ipcServer)
     {
         _logger = logger;
         _processTracker = processTracker;
-        _ipcServer = new IpcServer(_processTracker);
+        // Получаем готовый экземпляр IpcServer из DI-контейнера, а не создаем его вручную.
+        _ipcServer = ipcServer;
     }
 
     [SupportedOSPlatform("windows")]

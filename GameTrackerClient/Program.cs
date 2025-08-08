@@ -1,4 +1,7 @@
 using System.Threading;
+using Microsoft.Extensions.Configuration;
+using Serilog;
+using System.IO;
 
 namespace GameTrackerClient;
 
@@ -10,28 +13,51 @@ static class Program
     [STAThread]
     static void Main()
     {
-        // Добавляем глобальные обработчики исключений
-        Application.ThreadException += Application_ThreadException;
-        AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
+        // 1. Настраиваем конфигурацию для чтения appsettings.json
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+            .Build();
 
-        // To customize application configuration such as set high DPI settings or default font,
-        // see https://aka.ms/applicationconfiguration.
-        ApplicationConfiguration.Initialize();
-        Application.Run(new MainForm());
+        // 2. Настраиваем глобальный статический логгер Serilog
+        Log.Logger = new LoggerConfiguration()
+            .ReadFrom.Configuration(configuration)
+            .CreateLogger();
+
+        // 3. Оборачиваем запуск приложения в try/catch/finally для надежного логирования
+        try
+        {
+            Log.Information("Application starting up");
+
+            // Добавляем глобальные обработчики исключений
+            Application.ThreadException += Application_ThreadException;
+            AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
+
+            ApplicationConfiguration.Initialize();
+            Application.Run(new MainForm());
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "A fatal error occurred during application startup.");
+        }
+        finally
+        {
+            Log.Information("Application shutting down.");
+            // Крайне важно! Гарантирует, что все сообщения из буфера будут записаны в файл перед выходом.
+            Log.CloseAndFlush();
+        }
     }
 
     private static void Application_ThreadException(object sender, ThreadExceptionEventArgs e)
     {
-        Logger.Error("Unhandled UI thread exception.", e.Exception);
+        Log.Error(e.Exception, "Unhandled UI thread exception.");
         MessageBox.Show($"An unhandled UI error occurred: {e.Exception.Message}", "Critical Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        Application.Exit();
     }
 
     private static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
-        Logger.Error("Unhandled non-UI thread exception.", e.ExceptionObject as Exception);
+        Log.Error(e.ExceptionObject as Exception, "Unhandled non-UI thread exception.");
         MessageBox.Show($"A critical non-UI error occurred. See log for details.", "Critical Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        Application.Exit();
     }
     
 }

@@ -5,6 +5,8 @@
 
 using System.IO.Pipes;
 using System.Runtime.Versioning;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 
@@ -14,18 +16,30 @@ public class IpcServer
 {
     private const string PipeName = "GameTrackerPipe";
     private readonly ProcessTracker _processTracker;
+    private readonly ILogger<IpcServer> _logger;
+    private readonly PipeSecurity _pipeSecurity;
     private const int PipeRestartDelayMs = 100;
     private const int MaxServerInstances = 4;
 
-    public IpcServer(ProcessTracker processTracker)
+    [SupportedOSPlatform("windows")]
+    public IpcServer(ProcessTracker processTracker, ILogger<IpcServer> logger)
     {
         _processTracker = processTracker;
+        _logger = logger;
+         
+        // Создаем объект безопасности ОДИН РАЗ при инициализации сервера.
+        // Это более эффективно, чем создавать его в цикле при каждом новом подключении.
+        _pipeSecurity = new PipeSecurity();
+        // Разрешаем всем аутентифицированным пользователям (включая того, кто запустил GUI)
+        // подключаться к пайпу, созданному службой (которая работает от имени Local System).
+        var sid = new SecurityIdentifier(WellKnownSidType.AuthenticatedUserSid, null);
+        _pipeSecurity.AddAccessRule(new PipeAccessRule(sid, PipeAccessRights.ReadWrite, AccessControlType.Allow));
     }
 
     [SupportedOSPlatform("windows")]
     public async Task Start(CancellationToken token)
     {
-        Logger.Info("IPC Server starting...");
+        _logger.LogInformation("IPC Server starting...");
 
         // Запускаем несколько обработчиков подключений параллельно
         var tasks = Enumerable.Range(0, MaxServerInstances)
@@ -34,7 +48,7 @@ public class IpcServer
 
         // Ждем завершения всех обработчиков
         await Task.WhenAll(tasks);
-        Logger.Info("IPC Server stopped.");
+        _logger.LogInformation("IPC Server stopped.");
     }
 
     [SupportedOSPlatform("windows")]
@@ -44,16 +58,21 @@ public class IpcServer
         {
             try
             {
+                // Используем правильную перегрузку конструктора, которая принимает PipeSecurity.
+                // Для этого нужно указать оба размера буфера: inBufferSize и outBufferSize.
                 using var server = new NamedPipeServerStream(
                     PipeName,
                     PipeDirection.InOut,
                     MaxServerInstances,
-                    PipeTransmissionMode.Message,  // Изменено на Message
-                    PipeOptions.Asynchronous);
+                    PipeTransmissionMode.Message,
+                    PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly,
+                    0,  
+                    0
+                    );
 
-                Logger.Info("Pipe instance waiting for connection...");
+                _logger.LogInformation("Pipe instance waiting for connection...");
                 await server.WaitForConnectionAsync(token);
-                Logger.Info("Client connected.");
+                _logger.LogInformation("Client connected.");
 
                 using var reader = new StreamReader(server);
                 using var writer = new StreamWriter(server) { AutoFlush = true };
@@ -62,26 +81,26 @@ public class IpcServer
                 var request = await reader.ReadLineAsync(token);
                 if (request == null)
                 {
-                    Logger.Info("Client disconnected without sending a request.");
+                    _logger.LogInformation("Client disconnected without sending a request.");
                     continue;
                 }
 
-                Logger.Info($"Received request: {request}");
+                _logger.LogInformation("Received request: {Request}", request);
             
                 // Обрабатываем запрос
                 var response = HandleRequest(request);
-                Logger.Info($"Prepared response: {response}");
+                _logger.LogDebug("Prepared response (first 100 chars): {Response}", response.Length > 100 ? response[..100] : response);
 
                 // Отправляем ответ
                 await writer.WriteLineAsync(response);
-                Logger.Info("Response sent successfully.");
+                _logger.LogInformation("Response sent successfully.");
 
                 // Закрываем соединение
-                server.Disconnect();
+                // server.Disconnect();
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                Logger.Error($"Error in pipe handler: {ex.Message}", ex);
+                _logger.LogError(ex, "Error in pipe handler: {ErrorMessage}", ex.Message);
                 await Task.Delay(1000, token);
             }
         }

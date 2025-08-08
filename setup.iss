@@ -1,9 +1,13 @@
 ; Скрипт для Inno Setup для приложения Game Tracker
 ; Этот скрипт собирает клиент и сервер, и устанавливает сервер как службу Windows.
 
+#define VerFileNum FileOpen("VERSION")
+#define MyAppVersion Trim(FileRead(VerFileNum))
+#expr FileClose(VerFileNum)
+
 #define MyAppName "Game Tracker"
-#define MyAppVersion "1.0.0"
-#define MyAppPublisher "Your Company Name"
+
+#define MyAppPublisher "Swasher Corporation"
 #define MyAppURL "https://github.com/swasher/GameTrackerSolution"
 #define MyClientExeName "GameTrackerClient.exe"
 #define MyServiceExeName "GameTrackerService.exe"
@@ -54,6 +58,8 @@ Source: "GameTrackerClient\bin\Release\{#ClientNetVersion}\publish\*"; DestDir: 
 
 ; Примечание: Флаг recursesubdirs важен, так как dotnet publish может создавать подпапки (например, runtimes).
 
+Source: "GameTrackerService\appsettings.production.json"; DestDir: "{app}"; DestName: "appsettings.json"; Flags: ignoreversion
+
 [Icons]
 ; Ярлык в меню "Пуск" для клиента
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyClientExeName}"
@@ -63,15 +69,20 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyClientExeName}"; Tasks: desktopicon
 
 [Run]
-; После копирования файлов, регистрируем и запускаем службу.
-; Используем утилиту sc.exe, которая всегда есть в Windows.
-; 1. Создаем службу. binPath должен содержать пробел после =. start= auto - для автозапуска.
-Filename: "sc.exe"; Parameters: "create {#MyServiceName} binPath= ""{app}\{#MyServiceExeName}"" start= auto"; Flags: runhidden
+; 1. Создаем службу с указанием учетной записи LocalSystem
+Filename: "sc.exe"; Parameters: "create {#MyServiceName} binPath= ""{app}\{#MyServiceExeName}"" start= auto obj= LocalSystem"; Flags: runhidden
 
-; 2. Добавляем описание службе (опционально, но полезно).
+; 2. Добавляем описание
 Filename: "sc.exe"; Parameters: "description {#MyServiceName} ""Tracks application usage time and provides statistics."""; Flags: runhidden
 
-; 3. Запускаем службу.
+; 3. Даем права на папку установки
+Filename: "icacls.exe"; Parameters: """{app}"" /grant ""NT AUTHORITY\SYSTEM"":(OI)(CI)F /T"; Flags: runhidden
+
+; 4. Создаем директорию для данных перед установкой прав и затем Даем права на папку с данными
+Filename: "cmd.exe"; Parameters: "/c mkdir ""{commonappdata}\GameTracker"""; Flags: runhidden
+Filename: "icacls.exe"; Parameters: """{commonappdata}\GameTracker"" /grant ""NT AUTHORITY\SYSTEM"":(OI)(CI)F /T"; Flags: runhidden
+
+; 5. Запускаем службу
 Filename: "sc.exe"; Parameters: "start {#MyServiceName}"; Flags: runhidden
 
 [UninstallRun]

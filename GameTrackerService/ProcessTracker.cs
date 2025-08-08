@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Data.SQLite;
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using System.IO;
 
 namespace GameTrackerService;
@@ -19,6 +20,7 @@ public class ProcessTracker
 {
     private readonly string _dbPath;
     private readonly string _connStr;
+    private readonly ILogger<ProcessTracker> _logger;
     private readonly ConcurrentDictionary<string, DateTime> _activeProcesses = new();
     // Начальные директории для отслеживания. Они будут заменяться настройками из GUI.
     private List<string> _watchedDirectories = new() { @"G:\GOG Games\", @"G:\Battle.net\" };
@@ -27,8 +29,9 @@ public class ProcessTracker
     private static readonly TimeSpan PeriodicSaveInterval = TimeSpan.FromSeconds(30);
     private DateTime _lastPeriodicSave = DateTime.UtcNow;
 
-    public ProcessTracker(string dbPath)
+    public ProcessTracker(string dbPath, ILogger<ProcessTracker> logger)
     {
+        _logger = logger;
         _dbPath = dbPath;
         _connStr = $"Data Source={_dbPath};Version=3;";
         InitDb();
@@ -36,6 +39,7 @@ public class ProcessTracker
 
     private void InitDb()
     {
+        _logger.LogInformation("Initializing database at {DbPath}", _dbPath);
         using var conn = new SQLiteConnection(_connStr);
         conn.Open();
 
@@ -121,13 +125,13 @@ public class ProcessTracker
             if (!IsWatchedPath(path))
                 continue;
 
-            Console.WriteLine($"[TRACE] Found process: {path}");
+            _logger.LogTrace("Found process in watched path: {ProcessPath}", path);
             
             runningPaths.Add(path);
 
             // Используем потокобезопасный метод TryAdd
             if (_activeProcesses.TryAdd(path, now))
-                Console.WriteLine($"[TRACE] New tracked process: {path} at {now}");
+                _logger.LogInformation("New process tracking started: {ProcessPath}", path);
         }
 
         var completed = _activeProcesses.Keys.Except(runningPaths).ToList();
@@ -136,7 +140,7 @@ public class ProcessTracker
         {
             var start = _activeProcesses[path];
             var seconds = (int)(now - start).TotalSeconds;
-            Console.WriteLine($"[TRACE] Process exited: {path}, duration: {seconds} sec");
+            _logger.LogInformation("Process exited: {ProcessPath}, duration: {Duration}s", path, seconds);
             
             _activeProcesses.TryRemove(path, out _);
             SaveTime(path, seconds);
@@ -145,7 +149,7 @@ public class ProcessTracker
 
     private void SaveTime(string path, int seconds)
     {
-        Console.WriteLine($"[TRACE] Saving to DB: {path} -> +{seconds} sec");
+        _logger.LogDebug("Saving time to DB for {ProcessPath}: +{Seconds}s", path, seconds);
         
         using var conn = new SQLiteConnection(_connStr);
         conn.Open();
@@ -166,7 +170,7 @@ public class ProcessTracker
     public void SaveAllActiveProcessTimes()
     {
         var now = DateTime.UtcNow;
-        Console.WriteLine($"[INFO] Service shutting down. Saving session time for active processes.");
+        _logger.LogInformation("Service shutting down. Saving session time for active processes.");
  
         // Сначала сохраняем оставшиеся "куски" времени
         SaveActiveSessionChunks(now);
@@ -175,7 +179,7 @@ public class ProcessTracker
  
     private void SaveActiveSessionChunks(DateTime now)
     {
-        Console.WriteLine($"[INFO] Performing periodic save for active processes.");
+        _logger.LogDebug("Performing periodic save for active processes.");
         foreach (var (path, startTime) in _activeProcesses)
         {
             var seconds = (int)(now - startTime).TotalSeconds;
@@ -194,7 +198,7 @@ public class ProcessTracker
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         
-        Console.WriteLine($"[INFO] Watched directories updated: {string.Join(", ", _watchedDirectories)}");
+        _logger.LogInformation("Watched directories updated: {Directories}", string.Join(", ", _watchedDirectories));
     }
     
     public List<string> GetWatchedDirectories()

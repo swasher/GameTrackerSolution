@@ -127,9 +127,5 @@ public class IpcClient
         var response = await SendRequestAsync($"SET_PROCESS_TRACKING {payload}");
         return response == "\"OK\"";
     }
-
-
-
-
     
 }
